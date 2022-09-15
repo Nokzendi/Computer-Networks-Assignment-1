@@ -40,6 +40,7 @@ def handle_client(sock, addr):
                 path = path + " " + msg_list[i]
 
             # Checking if the input directory is a valid directory
+            # We run a separate check for ".." as it is a valid command to back one level from our current directory
             dir_list = os.listdir()
             if path in dir_list:
                 os.chdir(path)
@@ -65,15 +66,19 @@ def handle_client(sock, addr):
             # Reading the file and send it in bytes of BUFFER_SIZE
             with open(filename, "r") as f:
                 while True:
+                    # Reads the file data in strings BUFFER_SIZE at a time
                     bytes_read = f.read(BUFFER_SIZE)
                     # If no data is read, transfer is complete
                     if not bytes_read:
                         f.close()
                         break
+                    # Since our bytes_read is a string, we encrypt it using our encryption algorithm 
+                    # We then encode it using 'utf-8' to send it over the network
                     bytes_read = my_encode(bytes_read, encrypt_mode)
                     bytes_read = bytes(bytes_read, 'utf-8')
                     sock.sendall(bytes_read)
 
+            # Sending the downnload status to the client when it finishes.
             msg = "Download Completed"
             msg = my_encode(msg, encrypt_mode)
             myFunctions.send_msg(sock, msg)
@@ -87,7 +92,8 @@ def handle_client(sock, addr):
             # Receiving our file
             with open(filename, "w") as f:
                 while True:
-                    # Read 4096 bytes from the socket
+                    # Once we receive our data, we first decode the 'utf-8' layer
+                    # Then we decrypt according to the encrytion types chosen by the client.
                     bytes_read = sock.recv(BUFFER_SIZE).decode()
                     bytes_read = my_decode(bytes_read, encrypt_mode)
                     if not bytes_read:
@@ -95,18 +101,21 @@ def handle_client(sock, addr):
                         # Nothing received. File transmission done
                         break
                     f.write(bytes_read)
+                    # Checking the file size received from the connection. 
+                    # NOTE: I could have merged the two "if" conditions into one using a logical OR operator
+                    # Not done here only because the Design document is already made with this structure
                     if len(bytes_read) < BUFFER_SIZE:
                         f.close()
                         break
-
+            
+            # Sending the upload status to the client after it finishes.
             msg = "Upload Completed"
             msg = my_encode(msg, encrypt_mode)
             myFunctions.send_msg(sock, msg)
         else:
+            # Server sends back the same message it received from the client
             to_send_msg = my_encode(msg, encrypt_mode)
             myFunctions.send_msg(sock, to_send_msg)
-        # Server sends back the same message it received from the client
-        # myFunctions.send_msg(sock, msg)  # Blocks until sent
     except (ConnectionError, BrokenPipeError):
         print('Socket error')
     finally:
